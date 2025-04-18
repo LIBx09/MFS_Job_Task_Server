@@ -1,11 +1,14 @@
 const express = require("express");
 const app = express();
 require("dotenv").config();
+const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
-const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+// const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const cors = require("cors");
 const port = process.env.PORT || 5000;
+//models
+const User = require("./models/User");
 
 app.use(express.json());
 app.use(cookieParser());
@@ -13,7 +16,7 @@ app.use(cors({ origin: "http://localhost:5173", credentials: true }));
 
 const verifyToken = (req, res, next) => {
   const token = req.cookies?.token;
-  console.log("token added before", token);
+  // console.log("token added before", token);
   if (!token) return res.status(401).send("Access Denied");
   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
     if (err) return res.status(403).send("Invalid Token");
@@ -22,20 +25,24 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.iciu9bb.mongodb.net/?appName=Cluster0`;
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.iciu9bb.mongodb.net/MFS?appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
-});
+// const client = new MongoClient(uri, {});
+mongoose
+  .connect(uri, {
+    serverApi: {
+      version: "1",
+      strict: true,
+      deprecationErrors: true,
+    },
+  })
+  .then(() => console.log("connected to MongoDB via Mongoose"))
+  .catch((err) => console.log("MongoDB connection error", err));
 
 async function run() {
   try {
-    const usersCollection = client.db("MFS").collection("users");
+    // const usersCollection = client.db("MFS").collection("users");
 
     app.post("/jwt", (req, res) => {
       const user = req.body;
@@ -62,23 +69,23 @@ async function run() {
     //Users Related APIs
 
     app.get("/users", verifyToken, async (req, res) => {
-      const result = await usersCollection.find().toArray();
-      res.send(result);
+      const users = await User.find();
+      res.send(users);
     });
 
     app.post("/users", async (req, res) => {
-      const user = req.body;
-      const result = await usersCollection.insertOne(user);
+      const user = new User(req.body);
+      const result = await user.save();
       res.send(result);
     });
 
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
@@ -87,7 +94,7 @@ async function run() {
 run().catch(console.dir);
 
 app.get("/", (req, res) => {
-  res.send("MFS IS RUNNING BOSS");
+  res.send("MFS IS RUNNING VIA MONGOOSE");
 });
 
 app.listen(port, () => {
