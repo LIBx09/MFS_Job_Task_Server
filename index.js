@@ -9,6 +9,8 @@ const cors = require("cors");
 const port = process.env.PORT || 5000;
 //models
 const User = require("./models/User");
+const UserTransaction = require("./models/UserTransactions");
+const Transactions = require("./models/Transactions");
 
 app.use(express.json());
 app.use(cookieParser());
@@ -35,7 +37,7 @@ async function run() {
 
     app.post("/jwt", async (req, res) => {
       const user = req.body;
-      console.log("38 user", user);
+      // console.log("38 user", user);
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: "5h",
       });
@@ -49,7 +51,7 @@ async function run() {
 
     const verifyToken = (req, res, next) => {
       const token = req.cookies?.token;
-      console.log("token added before", token);
+      // console.log("52 token added before", token);
       if (!token) return res.status(401).send("Access Denied");
       jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
         if (err) return res.status(403).send("Invalid Token");
@@ -100,7 +102,7 @@ async function run() {
       try {
         const email = req.params.email;
         const user = await User.findOne({ email });
-        console.log("88 user", user);
+        // console.log("103 user", user);
 
         if (!user) {
           return res.status(404).send({ message: "User Not Found" });
@@ -113,6 +115,58 @@ async function run() {
         });
       } catch (error) {
         res.status(500).send({ message: "Server error", error });
+      }
+    });
+
+    app.post("/transactions/UCashIn", async (req, res) => {
+      const { agentId, agentPin, amount, userPhn, userId } = req.body;
+      console.log("UCashIn", req.body);
+
+      if (!agentId || !agentPin || !userPhn || !amount) {
+        return res.status(400).send({ message: "All fields are required" });
+      }
+
+      try {
+        // Find the agent by ID and pin
+        const agent = await User.findById(agentId);
+        if (!agent || agent.role !== "agent") {
+          return res.status(404).send({ message: "Agent not found" });
+        }
+        if (agent.pin !== agentPin) {
+          return res.status(401).json({ message: "Invalid agent pin" });
+        }
+        const user = await User.findOne({ mobile: userPhn });
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
+        if (agent.balance < amount) {
+          return res.status(400).send({ message: "Insufficient balance" });
+        }
+
+        const amountNum = Number(amount); // Always convert amount to number
+
+        if (agent.balance < amountNum) {
+          return res.status(400).send({ message: "Insufficient balance" });
+        }
+
+        agent.balance -= amount;
+        user.balance += amountNum;
+
+        const transaction = new Transactions({
+          type: "cash-in",
+          amount,
+          formUser: agentId,
+          toUser: user._id,
+          fee: 0,
+        });
+
+        await agent.save();
+        await user.save();
+        await transaction.save();
+        res.status(200).send({ message: "Cash-in successful", transaction });
+      } catch (error) {
+        console.error("Error in UCashIn:", error);
+        return res.status(500).send({ message: "Internal Server Error" });
       }
     });
 
